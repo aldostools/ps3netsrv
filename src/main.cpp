@@ -1799,6 +1799,10 @@ void *client_thread(void *arg)
 
 int main(int argc, char *argv[])
 {
+#ifndef BUILD_DATE
+#define BUILD_DATE "unknown"
+#endif
+
 #ifndef MAKEISO
 	int s;
 	uint16_t port = NETISO_PORT;
@@ -1811,13 +1815,13 @@ int main(int argc, char *argv[])
 	// Show build number
 	set_white_text();
 #ifndef MAKEISO
-	printf("ps3netsrv build 20260101");
+	printf("ps3netsrv build " BUILD_DATE);
 	#ifdef READ_ONLY
 	set_gray_text();
 	printf(" [READ-ONLY]");
 	#endif
 #else
-	printf("makeiso build 20260101");
+	printf("makeiso build " BUILD_DATE);
 #endif
 
 	set_red_text();
@@ -2076,7 +2080,7 @@ int main(int argc, char *argv[])
 		{
 			printf("Current Host Name: %s\n", host);
 			host_entry = gethostbyname(host); //find host information
-			if(host_entry);
+			if(host_entry)
 			{
 				set_gray_text();
 				for(int i = 0; host_entry->h_addr_list[i]; i++)

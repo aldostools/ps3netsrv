@@ -1,4 +1,5 @@
 # ps3netsrv
+![Build Status](https://github.com/aldostools/ps3netsrv/actions/workflows/build.yml/badge.svg)
 
 ps3netsrv is a server application used to stream content from a remote server to the PS3.
 
