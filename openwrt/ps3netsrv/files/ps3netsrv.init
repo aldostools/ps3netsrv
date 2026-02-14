@@ -14,19 +14,9 @@ _err() {
 	logger -p daemon.err -t "$NAME" "$*"
 }
 
-_change_owner() {
-	local u="$1"; shift
-
-	local d
-	for d in "$@"; do
-		if [ -f "$d" ]; then
-			chown "$u" "$d" 2>/dev/null || return 1
-		elif [ -d "$d" ]; then
-			chown -R "$u" "$d" 2>/dev/null || return 1
-		fi
-	done
-
-	return 0
+is_valid_whitelist() {
+	# Validate x.x.x.x where x is 0-255 or *
+	echo "$1" | grep -Eq '^(\*|([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5]))\.(\*|([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5]))\.(\*|([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5]))\.(\*|([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5]))$'
 }
 
 ps3netsrv_validate() {
@@ -34,7 +24,8 @@ ps3netsrv_validate() {
 		'enabled:bool:0' \
 		'dir:string:/root' \
 		'user:string' \
-		'port:range(1024,65535)'
+		'port:range(1024,65535):38008' \
+		'whitelist:string'
 }
 
 ps3netsrv_start() {
@@ -46,20 +37,29 @@ ps3netsrv_start() {
 	[ -n "$port" ] || { _err "Please set bind port."; return 1; }
 	[ -d "$dir" ] || { _err "Please create PS3 Game dir first."; return 1; }
 
+	if [ -n "$whitelist" ]; then
+		if is_valid_whitelist "$whitelist"; then
+			_info "Using whitelist: $whitelist"
+		else
+			_err "Invalid whitelist format: $whitelist. Ignoring whitelist."
+			whitelist=""
+		fi
+	fi
+
 	if [ -n "$user" ]; then
-		if ( user_exists "$user" && _change_owner "$user" "$log" ); then
+		if id -u "$user" >/dev/null 2>&1; then
 				_info "ps3netsrv will run as user '${user}'."
 				if [ "$user" != "root" ]; then
 					_info "Please make sure user '${user}' has read access to directory: ${dir}"
 				fi
 		else
-			_info "Set run user to '${user}' failed, default user will be used."
+			_info "User '${user}' does not exist, default user (root) will be used."
 			user=
 		fi
 	fi
 
 	procd_open_instance "${NAME}.${section}"
-	procd_set_param command "$PROG" "$dir" "$port"
+	procd_set_param command "$PROG" "$dir" "$port" ${whitelist:+"$whitelist"}
 
 	procd_set_param respawn
 	procd_set_param stdout 1
@@ -68,8 +68,8 @@ ps3netsrv_start() {
 	[ -n "$user" ] && \
 		procd_set_param user "$user"
 
-	procd_add_jail "${NAME}.${section}" log
-	procd_add_jail_mount "$dir"
+	# procd_add_jail "${NAME}.${section}" log
+	# procd_add_jail_mount "$dir"
 	procd_close_instance
 }
 

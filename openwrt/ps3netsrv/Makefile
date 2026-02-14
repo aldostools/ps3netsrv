@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2012-2017 OpenWrt.org
+# ps3netsrv - PS3 Net Server for OpenWrt
 #
 # This is free software, licensed under the GNU General Public License v3.
 # See /LICENSE for more information.

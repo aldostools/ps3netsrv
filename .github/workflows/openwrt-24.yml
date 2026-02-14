@@ -1,0 +1,390 @@
+name: OpenWrt 24.10.5 Build
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-binary:
+    name: Binary (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 6
+      fail-fast: false
+      matrix:
+        include:
+          - target: apm821xx
+            subtarget: nand
+            platform: apm821xx_nand
+          - target: apm821xx
+            subtarget: sata
+            platform: apm821xx_sata
+          - target: armsr
+            subtarget: armv7
+            platform: armsr_armv7
+          - target: armsr
+            subtarget: armv8
+            platform: armsr_armv8
+          - target: at91
+            subtarget: sam9x
+            platform: at91_sam9x
+          - target: at91
+            subtarget: sama5
+            platform: at91_sama5
+          - target: at91
+            subtarget: sama7
+            platform: at91_sama7
+          - target: ath79
+            subtarget: generic
+            platform: ath79_generic
+          - target: ath79
+            subtarget: mikrotik
+            platform: ath79_mikrotik
+          - target: ath79
+            subtarget: nand
+            platform: ath79_nand
+          - target: ath79
+            subtarget: tiny
+            platform: ath79_tiny
+          - target: bcm27xx
+            subtarget: bcm2708
+            platform: bcm27xx_bcm2708
+          - target: bcm27xx
+            subtarget: bcm2709
+            platform: bcm27xx_bcm2709
+          - target: bcm27xx
+            subtarget: bcm2710
+            platform: bcm27xx_bcm2710
+          - target: bcm27xx
+            subtarget: bcm2711
+            platform: bcm27xx_bcm2711
+          - target: bcm27xx
+            subtarget: bcm2712
+            platform: bcm27xx_bcm2712
+          - target: bcm47xx
+            subtarget: generic
+            platform: bcm47xx_generic
+          - target: bcm47xx
+            subtarget: legacy
+            platform: bcm47xx_legacy
+          - target: bcm47xx
+            subtarget: mips74k
+            platform: bcm47xx_mips74k
+          - target: bcm4908
+            subtarget: generic
+            platform: bcm4908_generic
+          - target: bcm53xx
+            subtarget: generic
+            platform: bcm53xx_generic
+          - target: bmips
+            subtarget: bcm6318
+            platform: bmips_bcm6318
+          - target: bmips
+            subtarget: bcm63268
+            platform: bmips_bcm63268
+          - target: bmips
+            subtarget: bcm6328
+            platform: bmips_bcm6328
+          - target: bmips
+            subtarget: bcm6358
+            platform: bmips_bcm6358
+          - target: bmips
+            subtarget: bcm6362
+            platform: bmips_bcm6362
+          - target: bmips
+            subtarget: bcm6368
+            platform: bmips_bcm6368
+          - target: d1
+            subtarget: generic
+            platform: d1_generic
+          - target: gemini
+            subtarget: generic
+            platform: gemini_generic
+          - target: imx
+            subtarget: cortexa53
+            platform: imx_cortexa53
+          - target: imx
+            subtarget: cortexa7
+            platform: imx_cortexa7
+          - target: imx
+            subtarget: cortexa9
+            platform: imx_cortexa9
+          - target: ipq40xx
+            subtarget: chromium
+            platform: ipq40xx_chromium
+          - target: ipq40xx
+            subtarget: generic
+            platform: ipq40xx_generic
+          - target: ipq40xx
+            subtarget: mikrotik
+            platform: ipq40xx_mikrotik
+          - target: ipq806x
+            subtarget: chromium
+            platform: ipq806x_chromium
+          - target: ipq806x
+            subtarget: generic
+            platform: ipq806x_generic
+          - target: ixp4xx
+            subtarget: generic
+            platform: ixp4xx_generic
+          - target: kirkwood
+            subtarget: generic
+            platform: kirkwood_generic
+          - target: lantiq
+            subtarget: ase
+            platform: lantiq_ase
+          - target: lantiq
+            subtarget: xrx200
+            platform: lantiq_xrx200
+          - target: lantiq
+            subtarget: xrx200_legacy
+            platform: lantiq_xrx200_legacy
+          - target: lantiq
+            subtarget: xway
+            platform: lantiq_xway
+          - target: lantiq
+            subtarget: xway_legacy
+            platform: lantiq_xway_legacy
+          - target: layerscape
+            subtarget: armv7
+            platform: layerscape_armv7
+          - target: layerscape
+            subtarget: armv8_64b
+            platform: layerscape_armv8_64b
+          - target: loongarch64
+            subtarget: generic
+            platform: loongarch64_generic
+          - target: malta
+            subtarget: be
+            platform: malta_be
+          - target: malta
+            subtarget: be64
+            platform: malta_be64
+          - target: malta
+            subtarget: le
+            platform: malta_le
+          - target: malta
+            subtarget: le64
+            platform: malta_le64
+          - target: mediatek
+            subtarget: filogic
+            platform: mediatek_filogic
+          - target: mediatek
+            subtarget: mt7622
+            platform: mediatek_mt7622
+          - target: mediatek
+            subtarget: mt7623
+            platform: mediatek_mt7623
+          - target: mediatek
+            subtarget: mt7629
+            platform: mediatek_mt7629
+          - target: mpc85xx
+            subtarget: p1010
+            platform: mpc85xx_p1010
+          - target: mpc85xx
+            subtarget: p1020
+            platform: mpc85xx_p1020
+          - target: mpc85xx
+            subtarget: p2020
+            platform: mpc85xx_p2020
+          - target: mvebu
+            subtarget: cortexa53
+            platform: mvebu_cortexa53
+          - target: mvebu
+            subtarget: cortexa72
+            platform: mvebu_cortexa72
+          - target: mvebu
+            subtarget: cortexa9
+            platform: mvebu_cortexa9
+          - target: mxs
+            subtarget: generic
+            platform: mxs_generic
+          - target: octeon
+            subtarget: generic
+            platform: octeon_generic
+          - target: omap
+            subtarget: generic
+            platform: omap_generic
+          - target: pistachio
+            subtarget: generic
+            platform: pistachio_generic
+          - target: qoriq
+            subtarget: generic
+            platform: qoriq_generic
+          - target: qualcommax
+            subtarget: ipq807x
+            platform: qualcommax_ipq807x
+          - target: ramips
+            subtarget: mt7620
+            platform: ramips_mt7620
+          - target: ramips
+            subtarget: mt7621
+            platform: ramips_mt7621
+          - target: ramips
+            subtarget: mt76x8
+            platform: ramips_mt76x8
+          - target: ramips
+            subtarget: rt288x
+            platform: ramips_rt288x
+          - target: ramips
+            subtarget: rt305x
+            platform: ramips_rt305x
+          - target: ramips
+            subtarget: rt3883
+            platform: ramips_rt3883
+          - target: realtek
+            subtarget: rtl838x
+            platform: realtek_rtl838x
+          - target: realtek
+            subtarget: rtl839x
+            platform: realtek_rtl839x
+          - target: realtek
+            subtarget: rtl930x
+            platform: realtek_rtl930x
+          - target: realtek
+            subtarget: rtl931x
+            platform: realtek_rtl931x
+          - target: sifiveu
+            subtarget: generic
+            platform: sifiveu_generic
+          - target: starfive
+            subtarget: generic
+            platform: starfive_generic
+          - target: sunxi
+            subtarget: cortexa53
+            platform: sunxi_cortexa53
+          - target: sunxi
+            subtarget: cortexa7
+            platform: sunxi_cortexa7
+          - target: sunxi
+            subtarget: cortexa8
+            platform: sunxi_cortexa8
+          - target: tegra
+            subtarget: generic
+            platform: tegra_generic
+          - target: x86
+            subtarget: 64
+            platform: x86_64
+          - target: x86
+            subtarget: generic
+            platform: x86_generic
+          - target: x86
+            subtarget: geode
+            platform: x86_geode
+          - target: x86
+            subtarget: legacy
+            platform: x86_legacy
+          - target: zynq
+            subtarget: generic
+            platform: zynq_generic
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Prepare build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential curl file gawk gettext git libncurses5-dev libssl-dev python3 rsync subversion sudo swig unzip wget zlib1g-dev zstd
+
+    - name: Download SDK
+      run: |
+        BASE_URL="https://downloads.openwrt.org/releases/24.10.5/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
+        SDK_FILE=$(curl -s "$BASE_URL" | grep -o 'openwrt-sdk-[^"]*\.tar\.[a-z]*' | head -n 1)
+        wget -q "$BASE_URL$SDK_FILE"
+        mkdir sdk
+        tar -xf "$SDK_FILE" -C sdk --strip-components=1
+        rm "$SDK_FILE"
+
+    - name: Configure SDK and Package
+      run: |
+        cd sdk
+        mkdir -p package/ps3netsrv
+        cp -r $GITHUB_WORKSPACE/openwrt/ps3netsrv/* package/ps3netsrv/
+        mkdir -p package/ps3netsrv/src_code
+        cp $GITHUB_WORKSPACE/Makefile package/ps3netsrv/src_code/
+        cp $GITHUB_WORKSPACE/Makefile.linux package/ps3netsrv/src_code/
+        cp -r $GITHUB_WORKSPACE/include package/ps3netsrv/src_code/
+        cp -r $GITHUB_WORKSPACE/src package/ps3netsrv/src_code/
+        
+        # Switch to GitHub mirrors
+        sed -i 's|https://git.openwrt.org/feed/|https://github.com/openwrt/|g' feeds.conf.default
+        sed -i 's|https://git.openwrt.org/project/|https://github.com/openwrt/|g' feeds.conf.default
+        sed -i 's|https://git.openwrt.org/openwrt/|https://github.com/openwrt/|g' feeds.conf.default
+
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        make defconfig
+
+    - name: Build ps3netsrv
+      run: |
+        cd sdk
+        make package/ps3netsrv/compile V=s
+
+    - name: Prepare Artifact
+      run: |
+        IPK_FILE=$(find sdk/bin/packages -name "ps3netsrv*.ipk" | head -n 1)
+        # Rename to match artifact name
+        NEW_NAME="ps3netsrv_${{ matrix.platform }}_openwrt_24.ipk"
+        cp "$IPK_FILE" "$NEW_NAME"
+        echo "IPK_PATH=$NEW_NAME" >> $GITHUB_ENV
+    
+    - name: Upload Binary Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ps3netsrv_${{ matrix.platform }}_openwrt_24_ipk
+        path: ${{ env.IPK_PATH }}
+
+  build-luci:
+    name: Build LuCI App (IPK)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Prepare build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential curl file gawk gettext git libncurses5-dev libssl-dev python3 rsync subversion sudo swig unzip wget zlib1g-dev zstd
+
+    - name: Download SDK
+      run: |
+        # Using ath79/tiny as a small generic host for LuCI build
+        BASE_URL="https://downloads.openwrt.org/releases/24.10.5/targets/ath79/tiny/"
+        SDK_FILE=$(curl -s "$BASE_URL" | grep -o 'openwrt-sdk-[^"]*\.tar\.[a-z]*' | head -n 1)
+        wget -q "$BASE_URL$SDK_FILE"
+        mkdir sdk
+        tar -xf "$SDK_FILE" -C sdk --strip-components=1
+        rm "$SDK_FILE"
+
+    - name: Configure SDK and Package
+      run: |
+        cd sdk
+        mkdir -p package/luci-app-ps3netsrv
+        cp -r $GITHUB_WORKSPACE/openwrt/luci-app-ps3netsrv/* package/luci-app-ps3netsrv/
+        
+        # Switch to GitHub mirrors
+        sed -i 's|https://git.openwrt.org/feed/|https://github.com/openwrt/|g' feeds.conf.default
+        sed -i 's|https://git.openwrt.org/project/|https://github.com/openwrt/|g' feeds.conf.default
+        sed -i 's|https://git.openwrt.org/openwrt/|https://github.com/openwrt/|g' feeds.conf.default
+
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        make defconfig
+
+    - name: Build LuCI App
+      run: |
+        cd sdk
+        make package/luci-app-ps3netsrv/compile V=s
+
+    - name: Prepare Artifact
+      run: |
+        IPK_FILE=$(find sdk/bin/packages -name "luci-app-ps3netsrv*.ipk" | head -n 1)
+        echo "IPK_PATH=$IPK_FILE" >> $GITHUB_ENV
+    
+    - name: Upload LuCI Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: openwrt_luci-app-ps3netsrv_ipk
+        path: ${{ env.IPK_PATH }}
