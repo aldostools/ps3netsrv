@@ -11,14 +11,21 @@ jobs:
   build-binary:
     name: Binary (${{ matrix.platform }})
     runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository_owner }}/openwrt-build-env:latest
     strategy:
-      max-parallel: 6
+      max-parallel: 4
       fail-fast: false
       matrix:
         include:
           - target: apm821xx
             subtarget: nand
             platform: apm821xx_nand
+          - target: stm32
+            subtarget: stm32mp1
+            platform: stm32_stm32mp1
+          - target: rockchip
+            subtarget: armv8
+            platform: rockchip_armv8
           - target: apm821xx
             subtarget: sata
             platform: apm821xx_sata
@@ -301,42 +308,87 @@ jobs:
 
     - name: Prepare build environment
       run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential curl file gawk gettext git libncurses5-dev libssl-dev python3 rsync subversion sudo swig unzip wget zlib1g-dev zstd
+        sudo chown -R builder:builder $GITHUB_WORKSPACE
 
     - name: Download SDK
       run: |
         BASE_URL="https://downloads.openwrt.org/snapshots/targets/${{ matrix.target }}/${{ matrix.subtarget }}/"
         SDK_FILE=$(curl -s "$BASE_URL" | grep -o 'openwrt-sdk-[^"]*\.tar\.zst' | head -n 1)
-        wget -q "$BASE_URL$SDK_FILE"
-        mkdir sdk
-        tar --zstd -xf "$SDK_FILE" -C sdk --strip-components=1
-        rm "$SDK_FILE"
+        
+        if [ -z "$SDK_FILE" ]; then
+          echo "Error: Could not find SDK file at $BASE_URL"
+          exit 1
+        fi
+
+        for i in 1 2 3; do
+          echo "Attempt $i to download SDK: $SDK_FILE"
+          if wget -q "$BASE_URL$SDK_FILE"; then
+            mkdir -p sdk
+            if tar --zstd -xf "$SDK_FILE" -C sdk --strip-components=1; then
+              echo "SDK downloaded and extracted successfully."
+              rm "$SDK_FILE"
+              exit 0
+            else
+              echo "Extraction failed. Retrying..."
+              rm -rf sdk "$SDK_FILE"
+            fi
+          else
+            echo "Download failed. Retrying..."
+          fi
+          sleep 5
+        done
+        echo "Failed to download/extract SDK after 3 attempts."
+        exit 1
+
+    - name: Cache Feeds
+      id: cache-feeds
+      uses: actions/cache@v4
+      with:
+        path: sdk/feeds
+        key: feeds-snapshot-${{ hashFiles('sdk/feeds.conf.default') }}
 
     - name: Configure SDK and Package
       run: |
-        cd sdk
-        mkdir -p package/ps3netsrv
-        cp -r $GITHUB_WORKSPACE/openwrt/ps3netsrv/* package/ps3netsrv/
-        mkdir -p package/ps3netsrv/src_code
-        cp $GITHUB_WORKSPACE/Makefile package/ps3netsrv/src_code/
-        cp $GITHUB_WORKSPACE/Makefile.linux package/ps3netsrv/src_code/
-        cp -r $GITHUB_WORKSPACE/include package/ps3netsrv/src_code/
-        cp -r $GITHUB_WORKSPACE/src package/ps3netsrv/src_code/
+        # Ensure builder has access to the workspace
+        sudo chown -R builder:builder $GITHUB_WORKSPACE
         
-        # Switch to GitHub mirrors
-        sed -i 's|https://git.openwrt.org/feed/|https://github.com/openwrt/|g' feeds.conf.default
-        sed -i 's|https://git.openwrt.org/project/|https://github.com/openwrt/|g' feeds.conf.default
-        sed -i 's|https://git.openwrt.org/openwrt/|https://github.com/openwrt/|g' feeds.conf.default
+        sudo -u builder bash -c "
+          cd sdk
+          mkdir -p package/ps3netsrv
+          cp -r $GITHUB_WORKSPACE/openwrt/ps3netsrv/* package/ps3netsrv/
+          mkdir -p package/ps3netsrv/src_code
+          cp $GITHUB_WORKSPACE/Makefile package/ps3netsrv/src_code/
+          cp $GITHUB_WORKSPACE/Makefile.linux package/ps3netsrv/src_code/
+          cp -r $GITHUB_WORKSPACE/include package/ps3netsrv/src_code/
+          cp -r $GITHUB_WORKSPACE/src package/ps3netsrv/src_code/
+          
+          # Add LuCI app if this is the first target
+          if [ '${{ matrix.platform }}' = 'apm821xx_nand' ]; then
+            mkdir -p package/luci-app-ps3netsrv
+            cp -r $GITHUB_WORKSPACE/openwrt/luci-app-ps3netsrv/* package/luci-app-ps3netsrv/
+          fi
 
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-        make defconfig
+          # Switch to GitHub mirrors
+          sed -i 's|https://git.openwrt.org/feed/|https://github.com/openwrt/|g' feeds.conf.default
+          sed -i 's|https://git.openwrt.org/project/|https://github.com/openwrt/|g' feeds.conf.default
+          sed -i 's|https://git.openwrt.org/openwrt/|https://github.com/openwrt/|g' feeds.conf.default
+
+          # Update feeds if not cached
+          if [ '${{ steps.cache-feeds.outputs.cache-hit }}' != 'true' ]; then
+            ./scripts/feeds update -a
+          fi
+          ./scripts/feeds install -a
+          make defconfig
+        "
 
     - name: Build ps3netsrv
       run: |
-        cd sdk
-        make package/ps3netsrv/compile V=s
+        sudo -u builder bash -c "cd sdk && make package/ps3netsrv/compile"
+
+    - name: Build LuCI App
+      if: matrix.platform == 'apm821xx_nand'
+      run: |
+        sudo -u builder bash -c "cd sdk && make package/luci-app-ps3netsrv/compile"
 
     - name: Prepare Artifact
       run: |
@@ -357,57 +409,19 @@ jobs:
         name: ps3netsrv_${{ matrix.platform }}_openwrt_snapshot_apk
         path: ${{ env.APK_PATH }}
 
-  build-luci:
-    name: Build LuCI App (APK)
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Prepare build environment
+    - name: Prepare LuCI Artifact
+      if: matrix.platform == 'apm821xx_nand'
       run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential curl file gawk gettext git libncurses5-dev libssl-dev python3 rsync subversion sudo swig unzip wget zlib1g-dev zstd
-
-    - name: Download SDK
-      run: |
-        # Using ath79/tiny as a small generic host for LuCI build
-        BASE_URL="https://downloads.openwrt.org/snapshots/targets/ath79/tiny/"
-        SDK_FILE=$(curl -s "$BASE_URL" | grep -o 'openwrt-sdk-[^"]*\.tar\.zst' | head -n 1)
-        wget -q "$BASE_URL$SDK_FILE"
-        mkdir sdk
-        tar --zstd -xf "$SDK_FILE" -C sdk --strip-components=1
-        rm "$SDK_FILE"
-
-    - name: Configure SDK and Package
-      run: |
-        cd sdk
-        mkdir -p package/luci-app-ps3netsrv
-        cp -r $GITHUB_WORKSPACE/openwrt/luci-app-ps3netsrv/* package/luci-app-ps3netsrv/
-        
-        # Switch to GitHub mirrors
-        sed -i 's|https://git.openwrt.org/feed/|https://github.com/openwrt/|g' feeds.conf.default
-        sed -i 's|https://git.openwrt.org/project/|https://github.com/openwrt/|g' feeds.conf.default
-        sed -i 's|https://git.openwrt.org/openwrt/|https://github.com/openwrt/|g' feeds.conf.default
-
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-        make defconfig
-
-    - name: Build LuCI App
-      run: |
-        cd sdk
-        make package/luci-app-ps3netsrv/compile V=s
-
-    - name: Prepare Artifact
-      run: |
-        PKG_FILE=$(find sdk/bin/packages -name "luci-app-ps3netsrv*.apk" | head -n 1)
-        if [ -z "$PKG_FILE" ]; then
-            PKG_FILE=$(find sdk/bin/packages -name "luci-app-ps3netsrv*.ipk" | head -n 1)
+        # Snapshots use APK (usually)
+        LUCI_PKG=$(find sdk/bin/packages -name "luci-app-ps3netsrv*.apk" | head -n 1)
+        if [ -z "$LUCI_PKG" ]; then
+            LUCI_PKG=$(find sdk/bin/packages -name "luci-app-ps3netsrv*.ipk" | head -n 1)
         fi
-        echo "PKG_PATH=$PKG_FILE" >> $GITHUB_ENV
+        echo "LUCI_PKG_PATH=$LUCI_PKG" >> $GITHUB_ENV
     
     - name: Upload LuCI Artifact
+      if: matrix.platform == 'apm821xx_nand'
       uses: actions/upload-artifact@v4
       with:
         name: openwrt_luci-app-ps3netsrv_apk
-        path: ${{ env.PKG_PATH }}
+        path: ${{ env.LUCI_PKG_PATH }}
