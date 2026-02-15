@@ -78,15 +78,31 @@ jobs:
             image: almalinux:latest
             install_cmd: dnf install -y gcc-c++ make git glibc-static libstdc++-static rpm-build
             package_type: rpm
+          - distro: opensuse-leap
+            image: opensuse/leap:latest
+            install_cmd: zypper install -y gcc-c++ make git rpm-build tar gzip glibc-devel-static
+            package_type: rpm
+          - distro: alpine-latest
+            image: alpine:latest
+            install_cmd: apk add --no-cache build-base git
+            package_type: binary
+          - distro: slackware-latest
+            image: andy5995/slackware-build-essential:15.0
+            install_cmd: "true"
+            package_type: binary
+          - distro: gentoo-latest
+            image: gentoo/stage3:latest
+            install_cmd: "true"
+            package_type: binary
 
     container:
       image: ${{ matrix.image }}
 
     steps:
-    - uses: actions/checkout@v4
-
     - name: Install dependencies
       run: ${{ matrix.install_cmd }}
+
+    - uses: actions/checkout@v4
 
     - name: Build
       run: make OS=linux BUILD_DATE=$(date +%Y%m%d)
@@ -109,7 +125,7 @@ jobs:
         dpkg-deb --build package "$PACKAGE_NAME"
         echo "PACKAGED_FILE=$PACKAGE_NAME" >> $GITHUB_ENV
 
-    - name: Package .rpm (Fedora/AlmaLinux)
+    - name: Package .rpm (Fedora/AlmaLinux/openSUSE)
       if: matrix.package_type == 'rpm'
       run: |
         mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
@@ -146,12 +162,56 @@ jobs:
     - name: Prepare Binary Artifact (Arch/Others)
       if: matrix.package_type == 'binary'
       run: |
-        mv ps3netsrv ps3netsrv_${{ matrix.distro }}_amd64
-        echo "PACKAGED_FILE=ps3netsrv_${{ matrix.distro }}_amd64" >> $GITHUB_ENV
+        echo "PACKAGED_FILE=ps3netsrv" >> $GITHUB_ENV
 
     - name: Upload Linux Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ps3netsrv_${{ matrix.distro }}_amd64
         path: ${{ env.PACKAGED_FILE }}
+
+  build-freebsd:
+    name: FreeBSD Build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build and Package for FreeBSD
+      uses: vmactions/freebsd-vm@v1
+      with:
+        usesh: true
+        prepare: pkg install -y gmake gcc git
+        run: |
+          gmake OS=linux BUILD_DATE=$(date +%Y%m%d)
+          
+          # Create manifest file
+          cat <<EOF > ps3netsrv.ucl
+          name: "ps3netsrv"
+          version: "$(date +%Y%m%d)"
+          origin: "net/ps3netsrv"
+          comment: "PS3 Net Server"
+          arch: "freebsd:14:x86:64"
+          www: "https://github.com/aldostools/ps3netsrv"
+          maintainer: "aldostools@gmail.com"
+          prefix: "/usr/local"
+          desc: "PS3 Net Server application."
+          categories: ["net"]
+          files: {
+            /usr/local/bin/ps3netsrv: "$(sha256 -q ps3netsrv)"
+          }
+          EOF
+          
+          # Setup staging directory
+          mkdir -p pkg-root/usr/local/bin
+          cp ps3netsrv pkg-root/usr/local/bin/
+          
+          # Create the package
+          pkg create -M ps3netsrv.ucl -r pkg-root -o .
+          
+          # Rename for consistency
+          mv ps3netsrv-*.pkg ps3netsrv_freebsd_amd64.pkg
+    - name: Upload FreeBSD Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ps3netsrv_freebsd_amd64
+        path: ps3netsrv_freebsd_amd64.pkg
 
