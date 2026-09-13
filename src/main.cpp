@@ -63,10 +63,10 @@ typedef struct _client_t
 
 int make_iso = VISO_NONE;
 
+size_t root_len = 0;
 static char root_directory[MAX_PATH_LEN];
 
 #ifndef MAKEISO
-size_t root_len = 0;
 static client_t clients[MAX_CLIENTS];
 
 static int initialize_socket(uint16_t port)
@@ -617,12 +617,14 @@ static int process_open_cmd(client_t *client, netiso_open_cmd *cmd)
 		client->ro_file = NULL;
 	}
 
+	// handle close file
 	if((fp_len == 10) && (!strcmp(filepath, "/CLOSEFILE")))
 	{
 		ret = SUCCEEDED;
 		goto send_result; // return SUCCEEDED;
 	}
 
+	// translate path to local path & get viso mode
 	filepath = translate_path(filepath, &viso);
 	if(!filepath)
 	{
@@ -630,6 +632,10 @@ static int process_open_cmd(client_t *client, netiso_open_cmd *cmd)
 		goto send_result; // return FAILED;
 	}
 
+	// handle mounting of ps3netsrv root directory
+	if(strlen(filepath) == (root_len + 2) && strstr(filepath + rlen, "/.") != NULL) viso = VISO_ISO;
+
+	// open file or build virtual ISO if the file path is a folder
 	if(viso == VISO_NONE)
 	{
 		client->ro_file = new File();
