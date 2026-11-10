@@ -593,7 +593,11 @@ bool VIsoFile::isDirectChild(DirList *dir, DirList *parentCheck)
 	if (p != dir->path)
 		return false;
 
-	p += parentCheck->full_len + 1;
+    p += parentCheck->full_len;
+    if (*p != '/') return false;
+    p++;
+    if (*p == '\0') return false;
+	
 	if (strchr(p, '/'))
 		return false;
 
