@@ -609,7 +609,10 @@ bool VIsoFile::isDirectChild(DirList *dir, DirList *parentCheck)
 	if (p != dir->path)
 		return false;
 
-	p += parentCheck->full_len + 1;
+	p += parentCheck->full_len;
+	if (*p != '/') return false; // Require a real separator after the full parent name
+	p++;
+	if (*p == '\0') return false; // Reject empty child name
 	if (strchr(p, '/'))
 		return false;
 
